@@ -12,6 +12,7 @@ npm run build        # production build
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm run test         # Vitest unit tests
+make lint|static-check|complexity|security|build   # Makefile gates
 npx supabase login   # once per machine
 npx supabase link --project-ref <ref>   # once per clone
 npx supabase db push # apply migrations to the linked project
@@ -24,6 +25,7 @@ Note: scripts take effect once the scaffold exists (Phase 0).
 - **Next.js 16 App Router** (TypeScript, Tailwind, ESLint), scaffolded from the official `with-supabase` template. Server Actions for admin mutations, Route Handlers for the public join/status/upload APIs. Deploys on Vercel (Node.js runtime); repo is public on GitHub.
 - **Supabase**: Postgres with RLS on every table, Auth (email **magic link**, signups disabled — admins are invited by email), Storage bucket `payment-proofs` (private, accessed via signed URLs).
 - **Tables**: `admins` (→ `auth.users`, has default `sinpe_phone`), `matches` (slug, date/time, location, `price_crc`, `sinpe_phone`, status open/cancelled/finished), `registrations` (match_id, name, phone unique per match, status, `payment_proof_path`, secret `view_token`).
+- **Single-match lifecycle (product rule)**: only one match exists at a time. Creating a new match first empties the previous matches' storage folders (`payment-proofs/{matchId}/`), then deletes the match rows (registrations cascade). A match row is deleted only after its storage folder is empty, so proof screenshots can never be orphaned. Only `admins` persists across matches. See `clearPreviousMatches` in `lib/actions/matches.ts`.
 - **Registration status machine**: `pending` (joined, no proof) → `proof_submitted` → `approved` | `rejected` (rejected → player may re-upload). Admin can also approve without proof (cash).
 - **Player flow**: link `/m/[slug]` → join form → secret status page `/m/[slug]/p/[view_token]` (payment instructions + upload + live status). Players have **no auth**; access is via `view_token` validated server-side.
 - **Admin flow**: `/admin/login` (magic link) → dashboard → create/edit/cancel matches → match detail with player list, screenshot review (approve/reject), stats → invite admins, SINPE settings.

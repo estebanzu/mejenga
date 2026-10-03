@@ -19,3 +19,9 @@ export type RegistrationRow = {
   payment_proof_path: string | null;
   created_at: string;
 };
+
+export type RegistrationStatusRow = {
+  id: string;
+  match_id: string;
+  status: "pending" | "proof_submitted" | "approved" | "rejected";
+};

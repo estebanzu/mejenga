@@ -10,6 +10,7 @@ import {
 import { formatMatchDate, formatMatchTime, formatPrice } from "@/lib/format";
 import { formatCrPhone } from "@/lib/validation/phone";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { selectBanner, canShowUpload } from "@/lib/player-view";
 import type { MatchDetail, RegistrationRow } from "@/lib/types";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
@@ -17,34 +18,17 @@ import { Suspense } from "react";
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-type StatusBanner = { text: string; className: string };
-
-const banners: Record<RegistrationRow["status"], StatusBanner> = {
-  pending: {
-    text: "Inscripción registrada. Falta subir el comprobante de SINPE.",
-    className: "border-yellow-300 bg-yellow-50 text-yellow-900",
-  },
-  proof_submitted: {
-    text: "Comprobante en revisión. Vuelve a abrir este link para ver si ya fue aprobado.",
-    className: "border-blue-300 bg-blue-50 text-blue-900",
-  },
-  approved: {
-    text: "¡Confirmado! Ya tenés tu lugar en el partido.",
-    className: "border-green-300 bg-green-50 text-green-900",
-  },
-  rejected: {
-    text: "El comprobante fue rechazado. Sube otra captura.",
-    className: "border-red-300 bg-red-50 text-red-900",
-  },
+type PlayerView = {
+  match: MatchDetail;
+  reg: RegistrationRow;
+  proofUrl: string | null;
 };
 
-async function StatusContent({
-  params,
-}: {
-  params: Promise<{ slug: string; token: string }>;
-}) {
-  const { slug, token } = await params;
-  if (!UUID_RE.test(token)) notFound();
+async function loadPlayerView(
+  slug: string,
+  token: string,
+): Promise<PlayerView | null> {
+  if (!UUID_RE.test(token)) return null;
 
   const admin = createAdminClient();
 
@@ -54,7 +38,7 @@ async function StatusContent({
     .eq("slug", slug)
     .maybeSingle();
   const match = matchData as MatchDetail | null;
-  if (!match) notFound();
+  if (!match) return null;
 
   const { data: regData, error: regError } = await admin
     .from("registrations")
@@ -63,9 +47,7 @@ async function StatusContent({
     .eq("match_id", match.id)
     .maybeSingle();
   const reg = regData as RegistrationRow | null;
-  if (regError || !reg) notFound();
-
-  const banner = banners[reg.status];
+  if (regError || !reg) return null;
 
   let proofUrl: string | null = null;
   if (reg.payment_proof_path) {
@@ -74,6 +56,22 @@ async function StatusContent({
       .createSignedUrl(reg.payment_proof_path, 600);
     proofUrl = data?.signedUrl ?? null;
   }
+
+  return { match, reg, proofUrl };
+}
+
+async function StatusContent({
+  params,
+}: {
+  params: Promise<{ slug: string; token: string }>;
+}) {
+  const { slug, token } = await params;
+  const view = await loadPlayerView(slug, token);
+  if (!view) notFound();
+  const { match, reg, proofUrl } = view;
+
+  const banner = selectBanner(match.status, reg.status);
+  const showUpload = canShowUpload(match.status, reg.status);
 
   return (
     <Card>
@@ -97,12 +95,10 @@ async function StatusContent({
         <p className="text-sm">Hola, <span className="font-medium">{reg.name}</span> 👋</p>
 
         <div className={`rounded-lg border p-3 text-sm ${banner.className}`}>
-          {match.status === "cancelled"
-            ? "Este partido fue cancelado por el organizador."
-            : banner.text}
+          {banner.text}
         </div>
 
-        {reg.status !== "approved" && match.status !== "cancelled" && (
+        {showUpload && (
           <div className="rounded-lg border bg-muted p-3 text-sm">
             <p className="mb-1 font-medium">Paso 1 — Enviá el pago</p>
             <p>

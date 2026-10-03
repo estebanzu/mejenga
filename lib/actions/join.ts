@@ -3,8 +3,20 @@
 import { createClient } from "@/lib/supabase/server";
 import { joinSchema } from "@/lib/validation/schemas";
 import { redirect } from "next/navigation";
+import type { PostgrestError } from "@supabase/supabase-js";
 
 export type JoinFormState = { error: string | null };
+
+function joinErrorMessage(error: PostgrestError): string {
+  if (error.code === "23505") {
+    return "Este número ya está inscrito en este partido. Revisa el link que te compartieron.";
+  }
+  if (error.code === "42501") {
+    return "Este partido ya no está abierto a inscripciones.";
+  }
+  console.error("joinMatch failed:", error.message);
+  return "No se pudo completar la inscripción. Intenta de nuevo.";
+}
 
 export async function joinMatch(
   slug: string,
@@ -46,16 +58,7 @@ export async function joinMatch(
     .single();
 
   if (error) {
-    if (error.code === "23505") {
-      return {
-        error: "Este número ya está inscrito en este partido. Revisa el link que te compartieron.",
-      };
-    }
-    if (error.code === "42501") {
-      return { error: "Este partido ya no está abierto a inscripciones." };
-    }
-    console.error("joinMatch failed:", error.message);
-    return { error: "No se pudo completar la inscripción. Intenta de nuevo." };
+    return { error: joinErrorMessage(error) };
   }
 
   redirect(`/m/${slug}/p/${data.view_token}`);

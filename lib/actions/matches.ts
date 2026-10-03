@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { matchSchema } from "@/lib/validation/schemas";
+import { matchSchema, type MatchInput } from "@/lib/validation/schemas";
 import { generateSlug } from "@/lib/validation/slug";
 import { canTransitionMatch, type MatchStatus } from "@/lib/validation/match-status";
 import { revalidatePath } from "next/cache";
@@ -10,13 +10,90 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type MatchFormState = { error: string | null };
 
+function parseMatchForm(
+  formData: FormData,
+): { ok: true; data: MatchInput } | { ok: false; error: string } {
+  const parsed = matchSchema.safeParse({
+    match_date: String(formData.get("match_date") ?? ""),
+    match_time: String(formData.get("match_time") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    price_crc: Number(formData.get("price_crc")),
+    sinpe_phone: String(formData.get("sinpe_phone") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  });
+  if (!parsed.success) {
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
+    };
+  }
+  return { ok: true, data: parsed.data };
+}
+
+function matchRowValues(data: MatchInput) {
+  return {
+    match_date: data.match_date,
+    match_time: data.match_time,
+    location: data.location,
+    price_crc: data.price_crc,
+    sinpe_phone: data.sinpe_phone,
+    notes: data.notes || null,
+  };
+}
+
+async function insertMatchWithSlugRetry(
+  supabase: SupabaseClient,
+  createdBy: string,
+  data: MatchInput,
+): Promise<string | null> {
+  let lastMessage = "";
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: row, error } = await supabase
+      .from("matches")
+      .insert({ slug: generateSlug(), ...matchRowValues(data), created_by: createdBy })
+      .select("id")
+      .single();
+    if (!error && row) return row.id;
+    lastMessage = error?.message ?? "Error desconocido";
+    if (error?.code !== "23505") break; // only retry unique-violation on slug
+  }
+  console.error("insertMatch failed:", lastMessage);
+  return null;
+}
+
+/**
+ * Empties one match's storage folder. Returns true only when the folder is
+ * confirmed empty, so the caller can safely delete the match row afterwards
+ * (proof screenshots can never be orphaned — PII safety).
+ */
+async function clearMatchFolder(
+  supabase: SupabaseClient,
+  matchId: string,
+): Promise<boolean> {
+  const { data: files, error: listError } = await supabase.storage
+    .from("payment-proofs")
+    .list(matchId);
+  if (listError) {
+    console.error("cleanup: cannot list proofs", matchId, listError.message);
+    return false;
+  }
+  if (files && files.length > 0) {
+    const { error: removeError } = await supabase.storage
+      .from("payment-proofs")
+      .remove(files.map((f) => `${matchId}/${f.name}`));
+    if (removeError) {
+      console.error("cleanup: cannot remove proofs", matchId, removeError.message);
+      return false;
+    }
+  }
+  return true;
+}
+
 /**
  * Single-match policy: only one match lives at a time.
  * For every previous match: first empty its storage folder (payment proofs),
- * then delete the row (registrations cascade). A match row is only deleted
- * once its storage folder is confirmed empty, so proof screenshots can never
- * be orphaned (PII safety). Failures are logged and retried on the next
- * match creation.
+ * then delete the row (registrations cascade). Failures are logged and
+ * retried on the next match creation.
  */
 async function clearPreviousMatches(
   supabase: SupabaseClient,
@@ -26,28 +103,14 @@ async function clearPreviousMatches(
     .from("matches")
     .select("id")
     .neq("id", keepId);
-  if (error || !matches?.length) {
-    if (error) console.error("cleanup: cannot list previous matches", error.message);
+  if (error) {
+    console.error("cleanup: cannot list previous matches", error.message);
     return;
   }
 
-  for (const match of matches) {
-    const { data: files, error: listError } = await supabase.storage
-      .from("payment-proofs")
-      .list(match.id);
-    if (listError) {
-      console.error("cleanup: cannot list proofs", match.id, listError.message);
-      continue;
-    }
-    if (files && files.length > 0) {
-      const { error: removeError } = await supabase.storage
-        .from("payment-proofs")
-        .remove(files.map((f) => `${match.id}/${f.name}`));
-      if (removeError) {
-        console.error("cleanup: cannot remove proofs", match.id, removeError.message);
-        continue;
-      }
-    }
+  for (const match of matches ?? []) {
+    const folderEmpty = await clearMatchFolder(supabase, match.id);
+    if (!folderEmpty) continue;
     const { error: deleteError } = await supabase
       .from("matches")
       .delete()
@@ -69,47 +132,11 @@ export async function createMatch(
     return { error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
 
-  const parsed = matchSchema.safeParse({
-    match_date: String(formData.get("match_date") ?? ""),
-    match_time: String(formData.get("match_time") ?? ""),
-    location: String(formData.get("location") ?? ""),
-    price_crc: Number(formData.get("price_crc")),
-    sinpe_phone: String(formData.get("sinpe_phone") ?? ""),
-    notes: String(formData.get("notes") ?? ""),
-  });
-  if (!parsed.success) {
-    return {
-      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
-    };
-  }
+  const parsed = parseMatchForm(formData);
+  if (!parsed.ok) return { error: parsed.error };
 
-  let createdId: string | null = null;
-  let lastMessage = "";
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const { data, error } = await supabase
-      .from("matches")
-      .insert({
-        slug: generateSlug(),
-        match_date: parsed.data.match_date,
-        match_time: parsed.data.match_time,
-        location: parsed.data.location,
-        price_crc: parsed.data.price_crc,
-        sinpe_phone: parsed.data.sinpe_phone,
-        notes: parsed.data.notes || null,
-        created_by: user.sub,
-      })
-      .select("id")
-      .single();
-    if (!error && data) {
-      createdId = data.id;
-      break;
-    }
-    lastMessage = error?.message ?? "Error desconocido";
-    if (error?.code !== "23505") break; // only retry unique-violation on slug
-  }
-
+  const createdId = await insertMatchWithSlugRetry(supabase, user.sub, parsed.data);
   if (!createdId) {
-    console.error("createMatch failed:", lastMessage);
     return { error: "No se pudo crear el partido. Intenta de nuevo." };
   }
 
@@ -130,30 +157,12 @@ export async function updateMatch(
     return { error: "Tu sesión expiró. Vuelve a iniciar sesión." };
   }
 
-  const parsed = matchSchema.safeParse({
-    match_date: String(formData.get("match_date") ?? ""),
-    match_time: String(formData.get("match_time") ?? ""),
-    location: String(formData.get("location") ?? ""),
-    price_crc: Number(formData.get("price_crc")),
-    sinpe_phone: String(formData.get("sinpe_phone") ?? ""),
-    notes: String(formData.get("notes") ?? ""),
-  });
-  if (!parsed.success) {
-    return {
-      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
-    };
-  }
+  const parsed = parseMatchForm(formData);
+  if (!parsed.ok) return { error: parsed.error };
 
   const { error } = await supabase
     .from("matches")
-    .update({
-      match_date: parsed.data.match_date,
-      match_time: parsed.data.match_time,
-      location: parsed.data.location,
-      price_crc: parsed.data.price_crc,
-      sinpe_phone: parsed.data.sinpe_phone,
-      notes: parsed.data.notes || null,
-    })
+    .update(matchRowValues(parsed.data))
     .eq("id", matchId);
   if (error) {
     console.error("updateMatch failed:", error.message);
