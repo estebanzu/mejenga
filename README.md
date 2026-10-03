@@ -66,6 +66,19 @@ make complexity     # gate de complejidad ciclomática (max 10)
 make security       # npm audit (falla si hay vulnerabilidades)
 ```
 
+## Testing
+
+```bash
+npm run test       # unit tests (Vitest + zod logic)
+npm run test:e2e   # E2E (Playwright) — primera vez: npx playwright install chromium
+```
+
+Los E2E cubren el flujo completo con datos falsos: crear partido, inscribirse
+por el link público, subir comprobante, aprobar, teléfono duplicado y partido
+cancelado. **Corren contra el proyecto de Supabase enlazado** (borran partidos
+previos por la regla de un solo partido): si existe un partido real, la
+corrida se aborta (o usá `E2E_ALLOW_WIPE=1`).
+
 ## Checklist E2E manual
 
 1. Login con código mágico en `/auth/login`.

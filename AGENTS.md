@@ -12,6 +12,7 @@ npm run build        # production build
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
 npm run test         # Vitest unit tests
+npm run test:e2e     # Playwright E2E (needs dev server or lets it start one)
 make lint|static-check|complexity|security|build   # Makefile gates
 npx supabase login   # once per machine
 npx supabase link --project-ref <ref>   # once per clone
@@ -44,7 +45,7 @@ Note: scripts take effect once the scaffold exists (Phase 0).
 
 - **TDD for logic**: zod schemas, phone normalization (CR format), slug generation, status transitions → Vitest unit tests written first.
 - Always run `npm run lint && npm run typecheck && npm run test` before considering a task done; `npm run build` must pass before deploy.
-- E2E flows (join → upload → approve) verified manually against the local app / deployed preview — no E2E framework in v1.
+- E2E flows with **Playwright** (`npm run test:e2e`): admin create-match, player join → upload → approve, duplicate phone, cancelled match. Tests live in `e2e/` (config `playwright.config.ts`), run one worker against the local dev server + the linked Supabase project with fake data only. Global setup aborts if a non-E2E match exists (the single-match rule would delete it — override with `E2E_ALLOW_WIPE=1`); global teardown deletes every E2E row, storage file and the test admin. First run needs `npx playwright install chromium`.
 
 ## Git workflow
 
