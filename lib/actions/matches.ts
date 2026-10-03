@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { matchSchema } from "@/lib/validation/schemas";
 import { generateSlug } from "@/lib/validation/slug";
+import { canTransitionMatch, type MatchStatus } from "@/lib/validation/match-status";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -116,4 +117,85 @@ export async function createMatch(
 
   revalidatePath("/admin");
   redirect("/admin");
+}
+
+export async function updateMatch(
+  matchId: string,
+  _prevState: MatchFormState,
+  formData: FormData,
+): Promise<MatchFormState> {
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  if (!auth?.claims) {
+    return { error: "Tu sesión expiró. Vuelve a iniciar sesión." };
+  }
+
+  const parsed = matchSchema.safeParse({
+    match_date: String(formData.get("match_date") ?? ""),
+    match_time: String(formData.get("match_time") ?? ""),
+    location: String(formData.get("location") ?? ""),
+    price_crc: Number(formData.get("price_crc")),
+    sinpe_phone: String(formData.get("sinpe_phone") ?? ""),
+    notes: String(formData.get("notes") ?? ""),
+  });
+  if (!parsed.success) {
+    return {
+      error: parsed.error.issues[0]?.message ?? "Revisa los datos del formulario.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("matches")
+    .update({
+      match_date: parsed.data.match_date,
+      match_time: parsed.data.match_time,
+      location: parsed.data.location,
+      price_crc: parsed.data.price_crc,
+      sinpe_phone: parsed.data.sinpe_phone,
+      notes: parsed.data.notes || null,
+    })
+    .eq("id", matchId);
+  if (error) {
+    console.error("updateMatch failed:", error.message);
+    return { error: "No se pudieron guardar los cambios. Intenta de nuevo." };
+  }
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/matches/${matchId}`);
+  revalidatePath(`/admin/matches/${matchId}/edit`);
+  redirect(`/admin/matches/${matchId}`);
+}
+
+export async function setMatchStatus(formData: FormData): Promise<void> {
+  const id = String(formData.get("id") ?? "");
+  const to = String(formData.get("to") ?? "") as MatchStatus;
+
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  if (!auth?.claims) return;
+
+  const { data: match } = await supabase
+    .from("matches")
+    .select("status")
+    .eq("id", id)
+    .maybeSingle();
+  if (!match) return;
+
+  if (!canTransitionMatch(match.status as MatchStatus, to)) {
+    console.error(`invalid match transition ${match.status} -> ${to}`);
+    return;
+  }
+
+  const { error } = await supabase
+    .from("matches")
+    .update({ status: to })
+    .eq("id", id);
+  if (error) {
+    console.error("setMatchStatus failed:", error.message);
+    return;
+  }
+
+  revalidatePath("/admin");
+  revalidatePath(`/admin/matches/${id}`);
+  revalidatePath(`/admin/matches/${id}/edit`);
 }

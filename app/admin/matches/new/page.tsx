@@ -1,4 +1,5 @@
 import { MatchForm } from "@/components/match-form";
+import { createMatch } from "@/lib/actions/matches";
 import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -10,13 +11,21 @@ async function MatchFormWithDefaults() {
     .select("sinpe_phone")
     .maybeSingle();
 
-  return <MatchForm sinpePhone={data?.sinpe_phone ?? ""} />;
+  return (
+    <MatchForm
+      action={createMatch}
+      title="Nuevo partido"
+      description="Al crearlo se eliminan los datos del partido anterior."
+      submitLabel="Crear partido"
+      defaults={{ sinpe_phone: data?.sinpe_phone ?? "" }}
+    />
+  );
 }
 
 export default function NewMatchPage() {
   return (
     <div className="mx-auto flex min-h-svh w-full max-w-xl flex-col gap-6 p-6">
-      <header className="flex items-center gap-4">
+      <header>
         <Link
           href="/admin"
           className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
-import { createMatch, type MatchFormState } from "@/lib/actions/matches";
+import type { MatchFormState } from "@/lib/actions/matches";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,29 +18,57 @@ const initialState: MatchFormState = { error: null };
 const textareaClass =
   "flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
 
-export function MatchForm({ sinpePhone }: { sinpePhone: string }) {
-  const [state, formAction, isPending] = useActionState(
-    createMatch,
-    initialState,
-  );
+export type MatchDefaults = {
+  match_date?: string;
+  match_time?: string;
+  location?: string;
+  price_crc?: number;
+  sinpe_phone?: string;
+  notes?: string;
+};
+
+export function MatchForm({
+  action,
+  title,
+  description,
+  submitLabel,
+  defaults = {},
+}: {
+  action: (prev: MatchFormState, formData: FormData) => Promise<MatchFormState>;
+  title: string;
+  description: string;
+  submitLabel: string;
+  defaults?: MatchDefaults;
+}) {
+  const [state, formAction, isPending] = useActionState(action, initialState);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nuevo partido</CardTitle>
-        <CardDescription>
-          Al crearlo se eliminan los datos del partido anterior.
-        </CardDescription>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         <form action={formAction} className="flex flex-col gap-4">
           <div className="grid gap-2">
             <Label htmlFor="match_date">Fecha</Label>
-            <Input id="match_date" name="match_date" type="date" required />
+            <Input
+              id="match_date"
+              name="match_date"
+              type="date"
+              required
+              defaultValue={defaults.match_date}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="match_time">Hora</Label>
-            <Input id="match_time" name="match_time" type="time" required />
+            <Input
+              id="match_time"
+              name="match_time"
+              type="time"
+              required
+              defaultValue={defaults.match_time}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="location">Cancha / ubicación</Label>
@@ -50,6 +78,7 @@ export function MatchForm({ sinpePhone }: { sinpePhone: string }) {
               placeholder="Cancha Los Robles"
               required
               maxLength={120}
+              defaultValue={defaults.location}
             />
           </div>
           <div className="grid gap-2">
@@ -63,6 +92,7 @@ export function MatchForm({ sinpePhone }: { sinpePhone: string }) {
               inputMode="numeric"
               placeholder="3000"
               required
+              defaultValue={defaults.price_crc}
             />
           </div>
           <div className="grid gap-2">
@@ -74,7 +104,7 @@ export function MatchForm({ sinpePhone }: { sinpePhone: string }) {
               inputMode="tel"
               placeholder="8888-8888"
               required
-              defaultValue={sinpePhone}
+              defaultValue={defaults.sinpe_phone}
             />
           </div>
           <div className="grid gap-2">
@@ -85,11 +115,12 @@ export function MatchForm({ sinpePhone }: { sinpePhone: string }) {
               maxLength={300}
               placeholder="Ej: traer peto negro y blanco"
               className={textareaClass}
+              defaultValue={defaults.notes}
             />
           </div>
           {state.error && <p className="text-sm text-red-500">{state.error}</p>}
           <Button type="submit" disabled={isPending}>
-            {isPending ? "Creando…" : "Crear partido"}
+            {isPending ? "Guardando…" : submitLabel}
           </Button>
         </form>
       </CardContent>
