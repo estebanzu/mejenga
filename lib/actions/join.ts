@@ -47,19 +47,20 @@ export async function joinMatch(
     return { error: "Este partido ya no está abierto a inscripciones." };
   }
 
-  const { data, error } = await supabase
-    .from("registrations")
-    .insert({
-      match_id: match.id,
-      name: parsed.data.name,
-      phone: parsed.data.phone,
-    })
-    .select("view_token")
-    .single();
+  // Generate the secret token up front: anon has no SELECT policy on
+  // registrations (PII), so INSERT ... RETURNING (.select) would be denied.
+  const view_token = crypto.randomUUID();
+
+  const { error } = await supabase.from("registrations").insert({
+    match_id: match.id,
+    name: parsed.data.name,
+    phone: parsed.data.phone,
+    view_token,
+  });
 
   if (error) {
     return { error: joinErrorMessage(error) };
   }
 
-  redirect(`/m/${slug}/p/${data.view_token}`);
+  redirect(`/m/${slug}/p/${view_token}`);
 }
