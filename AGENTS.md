@@ -19,7 +19,15 @@ npx supabase link --project-ref <ref>   # once per clone
 npx supabase db push # apply migrations to the linked project
 ```
 
-Note: scripts take effect once the scaffold exists (Phase 0).
+## Status (2026-10-03)
+
+All four plan phases are shipped: scaffold, schema + RLS (migrations pushed), admin auth/CRUD, player join → upload → review, settings (SINPE default, admin invites), production deploy on Vercel (auto-deploys on push to `main`, env vars set), README, Makefile gates, Vitest (68) + Playwright E2E (4).
+
+Pending (in order):
+
+1. **Signups OFF in Supabase Auth dashboard (manual, security)**: with signups on, any visitor who submits an email at `/auth/login` gets an account and the `on_auth_user_created` trigger promotes it to admin.
+2. **Auth URL config for production (manual)**: Site URL + `https://mejenga-xi.vercel.app/auth/confirm` in Redirect URLs (localhost already works).
+3. **`make security` is red**: Tailwind 3 (`braces` CVE) — the only fix is a Tailwind 4 migration (breaking; decision pending).
 
 ## Architecture
 
@@ -30,7 +38,7 @@ Note: scripts take effect once the scaffold exists (Phase 0).
 - **Registration status machine**: `pending` (joined, no proof) → `proof_submitted` → `approved` | `rejected` (rejected → player may re-upload). Admin can also approve without proof (cash).
 - **Player flow**: link `/m/[slug]` → join form → secret status page `/m/[slug]/p/[view_token]` (payment instructions + upload + live status). Players have **no auth**; access is via `view_token` validated server-side.
 - **Admin flow**: `/admin/login` (magic link) → dashboard → create/edit/cancel matches → match detail with player list, screenshot review (approve/reject), stats → invite admins, SINPE settings.
-- **First admin**: `BOOTSTRAP_ADMIN_EMAIL` env — that email is auto-promoted to admin on first login; all other admins are invited from the dashboard.
+- **First admin**: signups are disabled in the dashboard; the first admin is created manually (Authentication → Users → Add user). The `on_auth_user_created` trigger auto-creates the `admins` row; every other admin is invited from the dashboard.
 
 ## Key conventions
 
@@ -56,6 +64,10 @@ Note: scripts take effect once the scaffold exists (Phase 0).
 ## Gotchas
 
 - Supabase Auth needs `Site URL` + redirect URLs configured for magic link to work in production (see README setup checklist).
+- Magic links arrive as PKCE `?code=` — `app/auth/confirm/route.ts` must call `exchangeCodeForSession` (the `token_hash` branch alone is not enough).
+- Anon has **no SELECT policy on `registrations`** (PII), so any `INSERT … RETURNING` (`.select()` after insert) from the join flow is denied (surfaces as 401/42501). Generate `view_token` in the action before inserting — see `lib/actions/join.ts`.
+- The `on_auth_user_created` trigger only fires for new auth users; users created before the trigger existed need the backfill migration `20261003215000_backfill_bootstrap_admins.sql`.
+- Playwright `addCookies`: `url` and `path` are mutually exclusive (never send both).
 - Phone uniqueness: one registration per phone per match — surface a friendly Spanish error on duplicate.
 - Match slugs are public by design (share links) — do not put sensitive data in slugs or match fields.
 - No team/lineup features, no OCR, no WhatsApp Business API in v1 (out of scope per approved plan).
