@@ -12,11 +12,11 @@ async function ErrorContent({
     <>
       {params?.error ? (
         <p className="text-sm text-muted-foreground">
-          Code error: {params.error}
+          Error: {params.error}
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
-          An unspecified error occurred.
+          Ocurrió un error inesperado.
         </p>
       )}
     </>
@@ -35,13 +35,18 @@ export default function Page({
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">
-                Sorry, something went wrong.
+                Algo salió mal.
               </CardTitle>
             </CardHeader>
             <CardContent>
               <Suspense>
                 <ErrorContent searchParams={searchParams} />
               </Suspense>
+              <p className="mt-4 text-sm">
+                <a href="/auth/login" className="underline underline-offset-4">
+                  Volver a iniciar sesión
+                </a>
+              </p>
             </CardContent>
           </Card>
         </div>
