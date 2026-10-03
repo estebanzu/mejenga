@@ -1,5 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { joinSchema, matchSchema } from "../lib/validation/schemas";
+import { joinSchema, matchSchema, inviteEmailSchema } from "../lib/validation/schemas";
+
+describe("inviteEmailSchema", () => {
+  it("accepts a valid email, trimmed", () => {
+    const result = inviteEmailSchema.safeParse("  admin@correo.com  ");
+    expect(result.success).toBe(true);
+    if (result.success) expect(result.data).toBe("admin@correo.com");
+  });
+
+  it("rejects malformed emails", () => {
+    expect(inviteEmailSchema.safeParse("no-es-correo").success).toBe(false);
+    expect(inviteEmailSchema.safeParse("").success).toBe(false);
+    expect(inviteEmailSchema.safeParse("a@b").success).toBe(false);
+  });
+});
 
 describe("joinSchema", () => {
   it("accepts a valid name and phone, normalizing the phone", () => {

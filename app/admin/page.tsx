@@ -115,9 +115,17 @@ export default function AdminPage() {
     <div className="mx-auto flex min-h-svh w-full max-w-3xl flex-col gap-6 p-6">
       <header className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Mis partidos</h1>
-        <Suspense fallback={null}>
-          <AuthButton />
-        </Suspense>
+        <div className="flex items-center gap-4">
+          <Link
+            href="/admin/settings"
+            className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+          >
+            Ajustes
+          </Link>
+          <Suspense fallback={null}>
+            <AuthButton />
+          </Suspense>
+        </div>
       </header>
 
       <Suspense
