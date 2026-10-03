@@ -68,7 +68,10 @@ describe("matchSchema", () => {
   });
 
   it("allows notes to be omitted", () => {
-    const { notes: _notes, ...withoutNotes } = valid;
-    expect(matchSchema.safeParse(withoutNotes).success).toBe(true);
+    const { match_date, match_time, location, price_crc, sinpe_phone } = valid;
+    expect(
+      matchSchema.safeParse({ match_date, match_time, location, price_crc, sinpe_phone })
+        .success
+    ).toBe(true);
   });
 });
