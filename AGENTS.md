@@ -14,6 +14,7 @@ npm run typecheck    # tsc --noEmit
 npm run test         # Vitest unit tests
 npm run test:e2e     # Playwright E2E (needs dev server or lets it start one)
 make lint|static-check|complexity|security|build   # Makefile gates
+make fill          # kill leftover local processes (dev server, node, Playwright)
 npx supabase login   # once per machine
 npx supabase link --project-ref <ref>   # once per clone
 npx supabase db push # apply migrations to the linked project

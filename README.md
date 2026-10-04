@@ -64,6 +64,7 @@ make static-check   # TypeScript (tsc --noEmit)
 make test           # Vitest (npm run test)
 make complexity     # gate de complejidad ciclomática (max 10)
 make security       # npm audit (falla si hay vulnerabilidades)
+make fill           # mata procesos locales leftovers (dev server, Playwright)
 ```
 
 ## Testing
